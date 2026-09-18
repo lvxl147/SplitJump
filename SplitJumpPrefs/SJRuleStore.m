@@ -100,4 +100,31 @@
 	                                     CFSTR(SJ_RELOAD_NOTIFY), NULL, NULL, YES);
 }
 
+#pragma mark - 通用开关
+
++ (BOOL)boolForKey:(NSString *)key defaultValue:(BOOL)def
+{
+	NSDictionary *d = [[NSUserDefaults standardUserDefaults]
+	    persistentDomainForName:SJ_DOMAIN];
+	id v = d[key];
+	if ([v isKindOfClass:[NSNumber class]]) return [v boolValue];
+	if ([v isKindOfClass:[NSString class]]) return [v boolValue];
+	return def;
+}
+
++ (void)setBool:(BOOL)value forKey:(NSString *)key
+{
+	NSMutableDictionary *d = [self mutableDomain];
+	d[key] = @(value);
+	[self commitDomain:d];
+}
+
++ (void)clearRules
+{
+	NSMutableDictionary *d = [self mutableDomain];
+	[d removeObjectForKey:@"RulesArray"];
+	[d removeObjectForKey:@"Rules"]; // 兼容 v1.0.x 的文本规则
+	[self commitDomain:d];
+}
+
 @end

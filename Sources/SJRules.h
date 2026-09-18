@@ -19,6 +19,11 @@ extern NSString *const SJReloadNotify;     // com.lvxl524.splitjump/ReloadPrefs
 @property (nonatomic, copy) NSString *target;
 @property (nonatomic, copy) NSArray<NSString *> *candidates;
 @property (nonatomic, copy) NSString *sourceLine;
+
+// 以下三个是「每条规则各自」的设置（对齐 JumpSelect 的规则编辑页）
+@property (nonatomic, assign) BOOL directJump;    // 开启后不弹窗，自动跳转列表首个候选
+@property (nonatomic, assign) BOOL showTarget;    // 弹窗首位显示被拦截的应用本体
+@property (nonatomic, assign) BOOL enableCrane;   // 弹窗内展开 Crane 多开容器
 @end
 
 @interface SJSettings : NSObject

@@ -133,7 +133,11 @@
 	if (!rule) return out;
 
 	SJSettings *s = [SJSettings shared];
-	BOOL canExpand = (s.enableCrane && [self craneAvailable]);
+	// 「兼容 Crane 容器」是每条规则各自的设置；未设置时回退全局
+	BOOL canExpand = (rule.enableCrane && [self craneAvailable]);
+
+	// 「显示目标拦截应用」：关掉时不把目标本体放进列表（但若候选只有它，仍显示，避免空面板）
+	BOOL showBase = rule.showTarget || rule.candidates.count <= 1;
 
 	for (NSString *bid in rule.candidates) {
 		if (![self isInstalled:bid]) continue;
@@ -142,6 +146,9 @@
 		UIImage *icon = SJAppIcon(bid);
 
 		// 1) 应用本体（默认容器）
+		BOOL isTarget = [bid isEqualToString:rule.target];
+		if (isTarget && !showBase) continue;
+
 		SJAppEntry *base = [[SJAppEntry alloc] init];
 		base.bundleID = bid;
 		base.containerID = nil;

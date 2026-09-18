@@ -207,8 +207,6 @@ static void SJResolve(NSString *bid)
 
 static void SJBeginIntercept(SJRule *rule, NSString *source, NSString *url, void (^resume)(NSString *))
 {
-	SJSettings *s = [SJSettings shared];
-
 	NSArray<SJAppEntry *> *entries = nil;
 	@try {
 		entries = [SJAppList entriesForRule:rule];
@@ -230,9 +228,10 @@ static void SJBeginIntercept(SJRule *rule, NSString *source, NSString *url, void
 	sSJPending = YES;
 	sSJResume = [resume copy];
 
-	if (s.mode == 1) {
+	// 「开启直接跳转」是每条规则各自的设置（对齐 JumpSelect）
+	if (rule.directJump) {
 		SJAppEntry *first = entries.firstObject;
-		SJLog(@"mode=direct -> %@ / %@", first.bundleID, first.containerID ?: @"(default)");
+		SJLog(@"directJump -> %@ / %@", first.bundleID, first.containerID ?: @"(default)");
 		[SJAppList activateContainer:first.containerID forBundleID:first.bundleID];
 		SJResolve(first.bundleID);
 		return;

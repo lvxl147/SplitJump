@@ -137,6 +137,15 @@ static NSString *SJStrFrom(NSDictionary *d, NSString *key, NSString *def)
 		SJRule *r = [[SJRule alloc] init];
 		r.target = target;
 		r.candidates = cands;
+
+		// 每条规则各自的设置；缺失时回退到全局设置
+		id dj = item[@"directJump"];
+		id st = item[@"showTarget"];
+		id ec = item[@"enableCrane"];
+		r.directJump  = [dj isKindOfClass:[NSNumber class]] ? [dj boolValue] : (self.mode == 1);
+		r.showTarget  = [st isKindOfClass:[NSNumber class]] ? [st boolValue] : YES;
+		r.enableCrane = [ec isKindOfClass:[NSNumber class]] ? [ec boolValue] : self.enableCrane;
+
 		r.sourceLine = [NSString stringWithFormat:@"%@ → %@", target,
 		                        [cands componentsJoinedByString:@","]];
 		[out addObject:r];
@@ -185,6 +194,10 @@ static NSString *SJStrFrom(NSDictionary *d, NSString *key, NSString *def)
 		SJRule *r = [[SJRule alloc] init];
 		r.target = target;
 		r.candidates = cands;
+		// 文本规则没有每条规则的开关，用全局设置兜底
+		r.directJump  = (self.mode == 1);
+		r.showTarget  = YES;
+		r.enableCrane = self.enableCrane;
 		r.sourceLine = line;
 		[out addObject:r];
 	}
