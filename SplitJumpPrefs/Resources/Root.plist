@@ -83,21 +83,17 @@
 			<key>cell</key><string>PSGroupCell</string>
 			<key>label</key><string>拦截规则</string>
 			<key>footerText</key>
-			<string>格式：被拦截的目标包名 = 候选1, 候选2, …（每行一条）。候选通常就是目标应用本身加上它的各个多开分身。</string>
+			<string>像 JumpSelect 一样点选应用即可：先选「拦截应用」（被拦截唤起的应用本体），再选「列表应用」（弹窗里显示的候选，一般是它的多开分身）。不需要手写包名。</string>
 		</dict>
 		<dict>
 			<key>cell</key><string>PSButtonCell</string>
-			<key>label</key><string>编辑拦截规则</string>
+			<key>label</key><string>添加 / 编辑拦截规则</string>
 			<key>action</key><string>editRules</string>
 		</dict>
 		<dict>
-			<key>cell</key><string>PSEditTextCell</string>
-			<key>label</key><string>放行的发起方</string>
-			<key>key</key><string>SourceBlacklist</string>
-			<key>defaults</key><string>com.lvxl524.splitjump</string>
-			<key>default</key><string>com.apple.springboard</string>
-			<key>placeholder</key><string>包名，逗号分隔</string>
-			<key>PostNotification</key><string>com.lvxl524.splitjump/ReloadPrefs</string>
+			<key>cell</key><string>PSButtonCell</string>
+			<key>label</key><string>清空全部规则</string>
+			<key>action</key><string>clearAllRules</string>
 		</dict>
 
 		<dict>

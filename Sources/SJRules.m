@@ -86,11 +86,61 @@ static NSString *SJStrFrom(NSDictionary *d, NSString *key, NSString *def)
 	self.craneAllContainers = SJBoolFrom(d, @"CraneAllContainers", YES);
 	self.earlyHook = SJBoolFrom(d, @"EarlyHook", NO);
 
-	self.sourceBlacklist = [self parseList:SJStrFrom(d, @"SourceBlacklist", kDefaultSourceBlacklist)];
-	self.rules = [self parseRules:SJStrFrom(d, @"Rules", @"")];
+	self.sourceBlacklist = [self parseBlacklistValue:d[@"SourceBlacklist"]];
+
+	// 优先用结构化规则（设置面板点选应用生成）；
+	// 没有时退回 v1.0.x 的文本规则，老用户配置不丢。
+	NSArray<SJRule *> *structured = [self rulesFromArray:d[@"RulesArray"]];
+	self.rules = structured ?: [self parseRules:SJStrFrom(d, @"Rules", @"")];
 }
 
 #pragma mark - 解析
+
+/// 放行黑名单：v1.1.0 起是字符串数组，v1.0.x 是逗号分隔字符串
+- (NSArray<NSString *> *)parseBlacklistValue:(id)v
+{
+	if ([v isKindOfClass:[NSArray class]]) {
+		NSMutableArray<NSString *> *out = [NSMutableArray array];
+		for (id item in v) {
+			if ([item isKindOfClass:[NSString class]] && item.length) [out addObject:item];
+		}
+		return out;
+	}
+	if ([v isKindOfClass:[NSString class]]) return [self parseList:v];
+	return [self parseList:kDefaultSourceBlacklist];
+}
+
+/// 设置面板点选生成的结构化规则：[ { target, candidates: [...] }, … ]
+- (nullable NSArray<SJRule *> *)rulesFromArray:(id)v
+{
+	if (![v isKindOfClass:[NSArray class]]) return nil;
+
+	NSMutableArray<SJRule *> *out = [NSMutableArray array];
+	for (id item in v) {
+		if (![item isKindOfClass:[NSDictionary class]]) continue;
+
+		NSString *target = item[@"target"];
+		if (![target isKindOfClass:[NSString class]] || !target.length) continue;
+
+		NSArray *raw = item[@"candidates"];
+		if (![raw isKindOfClass:[NSArray class]]) raw = @[ target ];
+
+		NSMutableArray<NSString *> *cands = [NSMutableArray array];
+		for (id c in raw) {
+			if ([c isKindOfClass:[NSString class]] && c.length) [cands addObject:c];
+		}
+		if (!cands.count) [cands addObject:target];
+		else if (![cands containsObject:target]) [cands insertObject:target atIndex:0];
+
+		SJRule *r = [[SJRule alloc] init];
+		r.target = target;
+		r.candidates = cands;
+		r.sourceLine = [NSString stringWithFormat:@"%@ → %@", target,
+		                        [cands componentsJoinedByString:@","]];
+		[out addObject:r];
+	}
+	return out.count ? out : nil;
+}
 
 - (NSArray<NSString *> *)parseList:(NSString *)raw
 {

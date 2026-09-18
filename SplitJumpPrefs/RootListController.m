@@ -13,7 +13,8 @@
 
 #import <UIKit/UIKit.h>
 #import <Preferences/PSListController.h>
-#import "RuleEditorController.h"
+#import "SJRuleListController.h"
+#import "SJRuleStore.h"
 
 #define SJ_DOMAIN @"com.lvxl524.splitjump"
 #define SJ_RELOAD_NOTIFY "com.lvxl524.splitjump/ReloadPrefs"
@@ -51,12 +52,32 @@
 	                                     CFSTR(SJ_RELOAD_NOTIFY), NULL, NULL, YES);
 }
 
-#pragma mark - 规则编辑
+#pragma mark - 规则管理
 
 - (void)editRules
 {
-	RuleEditorController *vc = [[RuleEditorController alloc] init];
+	// 规则管理页：放行黑名单 + 拦截规则列表（新增 / 编辑 / 删除）
+	SJRuleListController *vc = [[SJRuleListController alloc] initWithStyle:UITableViewStyleGrouped];
 	[self.navigationController pushViewController:vc animated:YES];
+}
+
+#pragma mark - 清空全部规则
+
+- (void)clearAllRules
+{
+	UIAlertController *alert =
+	    [UIAlertController alertControllerWithTitle:@"清空全部规则"
+	                                        message:@"将删除所有拦截规则（放行黑名单保留），确定继续？"
+	                                 preferredStyle:UIAlertControllerStyleAlert];
+	[alert addAction:[UIAlertAction actionWithTitle:@"取消"
+	                                          style:UIAlertActionStyleCancel
+	                                        handler:nil]];
+	[alert addAction:[UIAlertAction actionWithTitle:@"清空"
+	                                          style:UIAlertActionStyleDestructive
+	                                        handler:^(UIAlertAction *a) {
+		                                        [SJRuleStore saveRules:@[]];
+	                                        }]];
+	[self presentViewController:alert animated:YES completion:nil];
 }
 
 #pragma mark - 恢复默认

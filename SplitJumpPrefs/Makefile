@@ -4,7 +4,11 @@ ARCHS := arm64 arm64e
 include $(THEOS)/makefiles/common.mk
 
 BUNDLE_NAME = SplitJumpPrefs
-SplitJumpPrefs_FILES = RootListController.m RuleEditorController.m
+SplitJumpPrefs_FILES = RootListController.m \
+	SJRuleListController.m \
+	SJRuleEditorController.m \
+	SJAppPicker.m \
+	SJRuleStore.m
 SplitJumpPrefs_INSTALL_PATH = /Library/PreferenceBundles
 SplitJumpPrefs_FRAMEWORKS = UIKit Foundation
 # 不要写 PRIVATE_FRAMEWORKS = Preferences：现代 iOS SDK 已不再自带
