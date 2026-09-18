@@ -87,10 +87,13 @@ static SJPickerViewController *gSJController = nil;
 	UIWindow *w = nil;
 	if (scene) {
 		w = [[UIWindow alloc] initWithWindowScene:scene];
-		w.frame = scene.coordinateSpace.bounds;
-	} else {
+	}
+	if (!w) {
 		w = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
 	}
+	// 注意：UIScene.coordinateSpace 需要 iOS 16+，部署目标是 15.0，
+	// 所以这里统一用屏幕 bounds，避免可用性检查导致的编译错误。
+	w.frame = [UIScreen mainScreen].bounds;
 	w.rootViewController = vc;
 	w.windowLevel = UIWindowLevelAlert + 1;
 	w.backgroundColor = [UIColor clearColor];
