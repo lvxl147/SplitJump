@@ -102,7 +102,8 @@ static NSString *SJStrFrom(NSDictionary *d, NSString *key, NSString *def)
 	if ([v isKindOfClass:[NSArray class]]) {
 		NSMutableArray<NSString *> *out = [NSMutableArray array];
 		for (id item in v) {
-			if ([item isKindOfClass:[NSString class]] && item.length) [out addObject:item];
+			NSString *s = item;
+			if ([s isKindOfClass:[NSString class]] && s.length > 0) [out addObject:s];
 		}
 		return out;
 	}
@@ -127,7 +128,8 @@ static NSString *SJStrFrom(NSDictionary *d, NSString *key, NSString *def)
 
 		NSMutableArray<NSString *> *cands = [NSMutableArray array];
 		for (id c in raw) {
-			if ([c isKindOfClass:[NSString class]] && c.length) [cands addObject:c];
+			NSString *s = c;
+			if ([s isKindOfClass:[NSString class]] && s.length > 0) [cands addObject:s];
 		}
 		if (!cands.count) [cands addObject:target];
 		else if (![cands containsObject:target]) [cands insertObject:target atIndex:0];
