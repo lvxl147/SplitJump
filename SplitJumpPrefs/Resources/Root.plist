@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>items</key>
+	<array>
+
+		<dict>
+			<key>cell</key><string>PSGroupCell</string>
+			<key>label</key><string>总开关</string>
+			<key>footerText</key>
+			<string>拦截「跨 App 跳转」并弹出应用选择面板。修改后立即生效，无需注销。</string>
+		</dict>
+		<dict>
+			<key>cell</key><string>PSSwitchCell</string>
+			<key>label</key><string>启用 SplitJump</string>
+			<key>key</key><string>Enabled</string>
+			<key>defaults</key><string>com.lvxl524.splitjump</string>
+			<key>default</key><true/>
+			<key>PostNotification</key><string>com.lvxl524.splitjump/ReloadPrefs</string>
+		</dict>
+
+		<dict>
+			<key>cell</key><string>PSGroupCell</string>
+			<key>label</key><string>行为</string>
+		</dict>
+		<dict>
+			<key>cell</key><string>PSListItemsCell</string>
+			<key>label</key><string>触发方式</string>
+			<key>key</key><string>Mode</string>
+			<key>defaults</key><string>com.lvxl524.splitjump</string>
+			<key>default</key><integer>0</integer>
+			<key>validValues</key>
+			<array><integer>0</integer><integer>1</integer></array>
+			<key>validTitles</key>
+			<array>
+				<string>弹窗选择（推荐）</string>
+				<string>直接打开首个候选</string>
+			</array>
+			<key>PostNotification</key><string>com.lvxl524.splitjump/ReloadPrefs</string>
+		</dict>
+		<dict>
+			<key>cell</key><string>PSSwitchCell</string>
+			<key>label</key><string>仅拦截带 URL 的跳转</string>
+			<key>key</key><string>URLOnly</string>
+			<key>defaults</key><string>com.lvxl524.splitjump</string>
+			<key>default</key><false/>
+			<key>PostNotification</key><string>com.lvxl524.splitjump/ReloadPrefs</string>
+		</dict>
+		<dict>
+			<key>cell</key><string>PSSwitchCell</string>
+			<key>label</key><string>面板中显示发起方</string>
+			<key>key</key><string>ShowSourceApp</string>
+			<key>defaults</key><string>com.lvxl524.splitjump</string>
+			<key>default</key><true/>
+			<key>PostNotification</key><string>com.lvxl524.splitjump/ReloadPrefs</string>
+		</dict>
+
+		<dict>
+			<key>cell</key><string>PSGroupCell</string>
+			<key>label</key><string>多开支持（Crane）</string>
+			<key>footerText</key>
+			<string>检测到 CraneManager 时，面板会列出该应用的全部容器（以右侧小圆点标识）。</string>
+		</dict>
+		<dict>
+			<key>cell</key><string>PSSwitchCell</string>
+			<key>label</key><string>兼容 Crane 容器</string>
+			<key>key</key><string>EnableCrane</string>
+			<key>defaults</key><string>com.lvxl524.splitjump</string>
+			<key>default</key><true/>
+			<key>PostNotification</key><string>com.lvxl524.splitjump/ReloadPrefs</string>
+		</dict>
+		<dict>
+			<key>cell</key><string>PSSwitchCell</string>
+			<key>label</key><string>展开全部容器</string>
+			<key>key</key><string>CraneAllContainers</string>
+			<key>defaults</key><string>com.lvxl524.splitjump</string>
+			<key>default</key><true/>
+			<key>PostNotification</key><string>com.lvxl524.splitjump/ReloadPrefs</string>
+		</dict>
+
+		<dict>
+			<key>cell</key><string>PSGroupCell</string>
+			<key>label</key><string>拦截规则</string>
+			<key>footerText</key>
+			<string>格式：被拦截的目标包名 = 候选1, 候选2, …（每行一条）。候选通常就是目标应用本身加上它的各个多开分身。</string>
+		</dict>
+		<dict>
+			<key>cell</key><string>PSButtonCell</string>
+			<key>label</key><string>编辑拦截规则</string>
+			<key>action</key><string>editRules</string>
+		</dict>
+		<dict>
+			<key>cell</key><string>PSEditTextCell</string>
+			<key>label</key><string>放行的发起方</string>
+			<key>key</key><string>SourceBlacklist</string>
+			<key>defaults</key><string>com.lvxl524.splitjump</string>
+			<key>default</key><string>com.apple.springboard</string>
+			<key>placeholder</key><string>包名，逗号分隔</string>
+			<key>PostNotification</key><string>com.lvxl524.splitjump/ReloadPrefs</string>
+		</dict>
+
+		<dict>
+			<key>cell</key><string>PSGroupCell</string>
+			<key>label</key><string>高级（实验性）</string>
+			<key>footerText</key>
+			<string>若装有分屏 / 浮窗类插件（如 Stheno）并在其上游截走了跳转请求，导致面板不出现，可开启此项把拦截点前移。开启后请自行验证各类跳转是否正常。</string>
+		</dict>
+		<dict>
+			<key>cell</key><string>PSSwitchCell</string>
+			<key>label</key><string>提早拦截（先拦后选再重投）</string>
+			<key>key</key><string>EarlyHook</string>
+			<key>defaults</key><string>com.lvxl524.splitjump</string>
+			<key>default</key><false/>
+			<key>PostNotification</key><string>com.lvxl524.splitjump/ReloadPrefs</string>
+		</dict>
+		<dict>
+			<key>cell</key><string>PSSwitchCell</string>
+			<key>label</key><string>写入调试日志</string>
+			<key>key</key><string>DebugLog</string>
+			<key>defaults</key><string>com.lvxl524.splitjump</string>
+			<key>default</key><false/>
+			<key>PostNotification</key><string>com.lvxl524.splitjump/ReloadPrefs</string>
+		</dict>
+
+		<dict>
+			<key>cell</key><string>PSGroupCell</string>
+			<key>label</key><string></string>
+		</dict>
+		<dict>
+			<key>cell</key><string>PSButtonCell</string>
+			<key>label</key><string>恢复默认设置</string>
+			<key>action</key><string>resetSettings</string>
+		</dict>
+
+	</array>
+	<key>title</key>
+	<string>SplitJump</string>
+</dict>
+</plist>

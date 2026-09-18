@@ -1,0 +1,8 @@
+#!/bin/bash
+set -e
+
+# SplitJump (rootless) — pre-remove：让 SpringBoard 卸载 dylib
+killall -9 SpringBoard 2>/dev/null || true
+
+echo "SplitJump removed."
+exit 0

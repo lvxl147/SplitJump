@@ -1,0 +1,19 @@
+#!/bin/bash
+set -e
+
+# SplitJump (rootless) — post-install
+JBROOT="${JBROOT:-/var/jb}"
+if [ ! -d "$JBROOT" ]; then JBROOT=""; fi
+
+# 确保偏好文件默认存在，避免首次进入设置页空白
+PREFS_DIR="$JBROOT/var/mobile/Library/Preferences"
+if [ -d "$PREFS_DIR" ] && [ ! -f "$PREFS_DIR/com.lvxl524.splitjump.plist" ]; then
+	touch "$PREFS_DIR/com.lvxl524.splitjump.plist" 2>/dev/null || true
+	chown mobile:mobile "$PREFS_DIR/com.lvxl524.splitjump.plist" 2>/dev/null || true
+	chmod 0644 "$PREFS_DIR/com.lvxl524.splitjump.plist" 2>/dev/null || true
+fi
+
+uicache -a 2>/dev/null || true
+
+echo "SplitJump installed. 注销（Respring）后生效。"
+exit 0

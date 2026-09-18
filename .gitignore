@@ -1,0 +1,12 @@
+# Theos
+.theos/
+obj/
+packages/
+*.deb
+
+# macOS
+.DS_Store
+
+# 编辑器
+.vscode/
+*.xcuserstate
