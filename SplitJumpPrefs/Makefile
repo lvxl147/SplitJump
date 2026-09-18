@@ -14,7 +14,9 @@ SplitJumpPrefs_FRAMEWORKS = UIKit Foundation
 # 不要写 PRIVATE_FRAMEWORKS = Preferences：现代 iOS SDK 已不再自带
 # Preferences.framework，链接期会报 `ld: framework 'Preferences' not found`。
 # 头文件由 Theos 的 vendor/include 提供，符号交给运行时 dyld 解析即可。
-SplitJumpPrefs_CFLAGS = -fobjc-arc
+SplitJumpPrefs_CFLAGS = -fobjc-arc \
+	-Wno-deprecated-declarations -Wno-unused-function -Wno-unused-variable \
+	-Wno-objc-method-access
 SplitJumpPrefs_RESOURCES = Resources/icon.png Resources/icon@2x.png Resources/Root.plist
 # PSListController 由「设置」App 在运行时提供，链接期不存在。
 # 用 dynamic_lookup 让 dyld 运行时解析，避免 -U 里 $_ 被 make 展开的问题。

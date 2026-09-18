@@ -129,15 +129,15 @@
 
 - (UITableViewCell *)tableView:(UITableView *)tv cellForRowAtIndexPath:(NSIndexPath *)ip
 {
-	static NSString *id_ = @"SJRuleEditCell";
-	UITableViewCell *cell = [tv dequeueReusableCellWithIdentifier:id_];
+	NSString *rid = [NSString stringWithFormat:@"SJRuleEdit%ld", (long)ip.section];
+	UITableViewCell *cell = [tv dequeueReusableCellWithIdentifier:rid];
 	if (!cell) {
 		cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle
-		                              reuseIdentifier:id_];
+		                              reuseIdentifier:rid];
 	}
 
 	if (ip.section == 0) {
-		if (self.target.length) {
+		if (self.target.length > 0) {
 			cell.textLabel.text = [SJAppPicker displayNameForBundleID:self.target];
 			cell.detailTextLabel.text = self.target;
 			cell.imageView.image = [SJAppPicker iconForBundleID:self.target];
@@ -157,23 +157,23 @@
 			cell.detailTextLabel.text = nil;
 			cell.imageView.image = nil;
 			cell.textLabel.textColor = [UIColor systemBlueColor];
-			cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
-			return cell;
+		} else {
+			NSString *bid = self.candidates[ip.row];
+			cell.textLabel.text = [SJAppPicker displayNameForBundleID:bid];
+			cell.detailTextLabel.text = bid;
+			cell.detailTextLabel.textColor = [UIColor secondaryLabelColor];
+			cell.imageView.image = [SJAppPicker iconForBundleID:bid];
 		}
-		NSString *bid = self.candidates[ip.row];
-		cell.textLabel.text = [SJAppPicker displayNameForBundleID:bid];
-		cell.detailTextLabel.text = bid;
-		cell.detailTextLabel.textColor = [UIColor secondaryLabelColor];
-		cell.imageView.image = [SJAppPicker iconForBundleID:bid];
-		cell.accessoryType = UITableViewCellAccessoryNone;
+		cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
 		return cell;
 	}
 
-	// 保存
+	// 第 3 节：保存按钮
 	cell.textLabel.text = @"保存此规则";
 	cell.textLabel.textColor = [UIColor systemBlueColor];
 	cell.textLabel.textAlignment = NSTextAlignmentCenter;
 	cell.imageView.image = nil;
+	cell.detailTextLabel.text = nil;
 	cell.accessoryType = UITableViewCellAccessoryNone;
 	return cell;
 }
@@ -238,12 +238,6 @@
 
 	[self.candidates removeObjectAtIndex:ip.row];
 	[self.tableView reloadData];
-}
-
-- (NSString *)tableView:(UITableView *)tv
-    titleForDeleteConfirmationButtonForRowAtIndexPath:(NSIndexPath *)ip
-{
-	return @"移除";
 }
 
 @end

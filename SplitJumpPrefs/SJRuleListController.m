@@ -182,10 +182,4 @@ static NSString *const kCellID = @"SJRuleCell";
 	[self reloadData];
 }
 
-- (NSString *)tableView:(UITableView *)tv
-    titleForDeleteConfirmationButtonForRowAtIndexPath:(NSIndexPath *)ip
-{
-	return @"删除此规则";
-}
-
 @end

@@ -39,7 +39,8 @@
 
 		NSMutableArray *clean = [NSMutableArray array];
 		for (id c in cands) {
-			if ([c isKindOfClass:[NSString class]] && c.length) [clean addObject:c];
+			NSString *s = c;
+			if ([s isKindOfClass:[NSString class]] && s.length > 0) [clean addObject:s];
 		}
 		if (!clean.count) [clean addObject:target];
 
@@ -79,7 +80,8 @@
 
 	NSMutableArray<NSString *> *out = [NSMutableArray array];
 	for (id item in v) {
-		if ([item isKindOfClass:[NSString class]] && item.length) [out addObject:item];
+		NSString *s = item;
+		if ([s isKindOfClass:[NSString class]] && s.length > 0) [out addObject:s];
 	}
 	return out;
 }
