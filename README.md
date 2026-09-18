@@ -39,11 +39,17 @@
 - 依赖：`mobilesubstrate`、`preferenceloader`（ElleKit / libhooker / substrate 都以 `mobilesubstrate` 虚拟包形式提供）
 - 架构：`arm64` / `arm64e`
 
-> **v1.0.1 依赖变更**：v1.0.0 把依赖写成 `org.coolstar.ellekit`，在隐根（RootHide）这类不以该 ID
-> 提供 ElleKit 的环境会报 `Depends org.coolstar.ellekit` 而装不上。v1.0.1 改为 `mobilesubstrate`，
-> 与 JumpSelect 的写法一致 —— 本插件 dylib 实际链接的也只有
-> `@rpath/CydiaSubstrate.framework/CydiaSubstrate`，和 JumpSelect 完全相同，因此凡是能装
-> JumpSelect / Stheno 的环境都能装本插件。
+> **v1.1.1（隐根 / 最大兼容版）**：`Depends` 只保留 `firmware (>= 15.0)`，不再声明
+> `mobilesubstrate` / `preferenceloader` / `org.coolstar.ellekit` 中的任何一个 ——
+> 所以在隐根（RootHide）、Dopamine、palera1n rootless 等任何 rootless 环境都能装，
+> 不会出现 `Depends xxx` 未满足而拒装的情况。
+>
+> 注意：运行期真正需要的仍然只有两样，且这两样在你装 JumpSelect / Stheno 的设备上必然存在：
+> ① substrate 兼容库（本插件 dylib 只链接 `@rpath/CydiaSubstrate.framework/CydiaSubstrate`）；
+> ② preferenceloader（只影响「设置 → SplitJump」这个入口是否出现，不影响插件本体）。
+>
+> 各版本依赖沿革：v1.0.0 `org.coolstar.ellekit`（隐根装不上）→ v1.0.1/v1.1.0 `mobilesubstrate` →
+> v1.1.1 起不再声明任何越狱相关依赖。
 
 ## 安装
 
