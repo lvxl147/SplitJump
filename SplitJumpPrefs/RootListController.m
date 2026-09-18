@@ -2,30 +2,37 @@
 // SplitJump 设置面板根控制器。
 //
 // 注意（踩坑记录，勿改）：
-//  1. PSListController 由「设置」App 运行时提供，链接期不存在 →
+//  1. PSListController 由「设置」App 在运行时提供，链接期不存在 →
 //     Makefile 里用 -Wl,-undefined,dynamic_lookup 让 dyld 运行时解析。
-//  2. _specifiers ivar 必须声明在「子类」上；写在 PSListController 的前置声明里
-//     会产生父类 ivar 符号，链接期报 _OBJC_IVAR_$_PSListController._specifiers 未定义。
+//  2. 不要在本子类里重复声明 _specifiers：Theos 的
+//     vendor/include/Preferences/PSListController.h 自己已经声明了
+//     `NSMutableArray *_specifiers;`，子类再声明会报 duplicate member。
+//     这里直接复用父类的 ivar。
+//  3. 需要用到的父类私有方法用「分类」声明（分类只加方法、不加 ivar，
+//     所以不会触发上面的冲突）。
 
 #import <UIKit/UIKit.h>
 #import <Preferences/PSListController.h>
-#import <Preferences/PSSpecifier.h>
 #import "RuleEditorController.h"
 
 #define SJ_DOMAIN @"com.lvxl524.splitjump"
 #define SJ_RELOAD_NOTIFY "com.lvxl524.splitjump/ReloadPrefs"
 
-@interface SplitJumpRootListController : PSListController {
-	NSArray *_specifiers; // 必须声明在子类上（见文件头注释 2）
-}
+@interface PSListController (SplitJumpPrivate)
+- (id)loadSpecifiersFromPlistName:(NSString *)name target:(id)target;
+- (void)reloadSpecifiers;
+@end
+
+@interface SplitJumpRootListController : PSListController
 @end
 
 @implementation SplitJumpRootListController
 
 - (id)specifiers
 {
+	// _specifiers 来自 PSListController（见文件头注释 2），不要重复声明
 	if (!_specifiers) {
-		_specifiers = [self loadSpecifiersFromPlistName:@"Root" target:self];
+		_specifiers = (NSMutableArray *)[self loadSpecifiersFromPlistName:@"Root" target:self];
 	}
 	return _specifiers;
 }
@@ -67,7 +74,8 @@
 	[alert addAction:[UIAlertAction actionWithTitle:@"确定"
 	                                          style:UIAlertActionStyleDestructive
 	                                        handler:^(UIAlertAction *a) {
-		                                        NSUserDefaults *d = [NSUserDefaults standardUserDefaults];
+		                                        NSUserDefaults *d =
+		                                            [NSUserDefaults standardUserDefaults];
 		                                        [d removePersistentDomainForName:SJ_DOMAIN];
 		                                        [d synchronize];
 		                                        CFNotificationCenterPostNotification(
