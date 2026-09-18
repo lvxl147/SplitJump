@@ -34,10 +34,16 @@
 
 ## 环境要求
 
-- 越狱类型：**rootless**（Dopamine 2.x / palera1n rootless / RootHide 等），安装到 `/var/jb`
+- 越狱类型：**rootless**（Dopamine 2.x / palera1n rootless / **RootHide 隐根** 等），安装到 `/var/jb`
 - 系统：iOS 15.0 及以上
-- 依赖：`org.coolstar.ellekit`、`preferenceloader`
+- 依赖：`mobilesubstrate`、`preferenceloader`（ElleKit / libhooker / substrate 都以 `mobilesubstrate` 虚拟包形式提供）
 - 架构：`arm64` / `arm64e`
+
+> **v1.0.1 依赖变更**：v1.0.0 把依赖写成 `org.coolstar.ellekit`，在隐根（RootHide）这类不以该 ID
+> 提供 ElleKit 的环境会报 `Depends org.coolstar.ellekit` 而装不上。v1.0.1 改为 `mobilesubstrate`，
+> 与 JumpSelect 的写法一致 —— 本插件 dylib 实际链接的也只有
+> `@rpath/CydiaSubstrate.framework/CydiaSubstrate`，和 JumpSelect 完全相同，因此凡是能装
+> JumpSelect / Stheno 的环境都能装本插件。
 
 ## 安装
 

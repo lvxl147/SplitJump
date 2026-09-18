@@ -1,9 +1,9 @@
 Package: com.lvxl524.splitjump
 Name: SplitJump
-Version: 1.0.0
+Version: 1.0.1
 Architecture: iphoneos-arm64
 Description: 拦截跨 App 跳转（URL/支付/授权/快捷指令），先弹出应用选择面板，选择后再交回系统继续打开，可与分屏/浮窗类插件（如 Stheno）协同，让选中的应用以浮窗打开。
-Depends: org.coolstar.ellekit, preferenceloader, firmware (>= 15.0)
+Depends: mobilesubstrate, preferenceloader, firmware (>= 15.0)
 Maintainer: lvxl524
 Author: lvxl524
 Section: Tweaks
