@@ -11,10 +11,12 @@
 #import "SJAppPicker.h"
 #import "SJRuleStore.h"
 
+// 注意：不要在类扩展里重新声明 onSaved —— 头文件里它带 nullable，
+// 类扩展里不写可空性会被 clang 判为 illegal redeclaration。
+// 头文件里它本来就是 readwrite，这里直接 self.onSaved = … 即可。
 @interface SJRuleEditorController ()
 @property (nonatomic, copy) NSString *target;
 @property (nonatomic, strong) NSMutableArray<NSString *> *candidates;
-@property (nonatomic, copy) void (^onSaved)(void);
 @end
 
 @implementation SJRuleEditorController
