@@ -4,6 +4,9 @@ obj/
 packages/
 *.deb
 
+# CI 生成的设置面板产物（拷进 layout/ 后由 make package 打包）
+layout/Library/PreferenceBundles/
+
 # macOS
 .DS_Store
 

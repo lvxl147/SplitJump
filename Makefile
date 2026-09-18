@@ -16,13 +16,12 @@ SplitJump_CFLAGS = -fobjc-arc -ISources \
 	-Wno-deprecated-declarations -Wno-unused-function -Wno-objc-method-access
 SplitJump_FRAMEWORKS = UIKit Foundation QuartzCore
 
-# 子工程必须声明成 $(TWEAK_NAME)_SUBPROJECTS。
-# Theos 的 makefiles/master/rules.mk 里是
-#   __SUBPROJECTS = $(call __schema_var_all,$(_INSTANCE)_,SUBPROJECTS)
-# 也就是读「实例名_子工程」这个变量来递归构建与暂存子目录；
-# 写成裸的 SUBPROJECTS、或 include subprojects.mk 都不会生效
-# （subprojects.mk 这个文件在现行 Theos 中并不存在，也不会报错，只会静默漏掉子工程）。
-SplitJump_SUBPROJECTS = SplitJumpPrefs
+# 设置面板是一个 PreferenceBundle，不走 Theos 的 subproject 机制：
+# $(TWEAK_NAME)_SUBPROJECTS 要求子工程产出 *.subproject.a 静态库，
+# bundle 不产出它，会让主 dylib 链接时报
+#   No rule to make target '.../arm64/*.subproject.a'
+# 因此 SplitJumpPrefs 由 CI 单独构建，产物拷进本工程的 layout/ 再一起打包。
+# 见 .github/workflows/build.yml 的 "Build prefs bundle" 步骤。
 
 include $(THEOS_MAKE_PATH)/tweak.mk
 

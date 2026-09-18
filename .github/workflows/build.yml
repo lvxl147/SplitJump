@@ -23,6 +23,27 @@ jobs:
           git clone --recursive https://github.com/theos/theos.git "$THEOS"
           ls "$THEOS/makefiles/common.mk"
 
+      # 设置面板是 PreferenceBundle，不能用 Theos 的 subproject 机制
+      # （subproject 要求产出 *.subproject.a，bundle 不产出，会让主 dylib 链接失败）。
+      # 这里单独构建，再把产物拷进主工程的 layout/，随主包一起打包。
+      - name: Build prefs bundle
+        run: |
+          MAKE=gmake
+          command -v gmake >/dev/null 2>&1 || MAKE=make
+          (cd SplitJumpPrefs && "$MAKE" THEOS_PACKAGE_SCHEME=rootless)
+          BUNDLE=$(find SplitJumpPrefs -type d -name "SplitJumpPrefs.bundle" | head -n1)
+          if [ -z "$BUNDLE" ]; then
+            echo "prefs bundle not found:"
+            find SplitJumpPrefs -name '*.bundle'
+            exit 1
+          fi
+          echo "prefs bundle: $BUNDLE"
+          ls -la "$BUNDLE"
+          mkdir -p layout/Library/PreferenceBundles
+          rm -rf layout/Library/PreferenceBundles/SplitJumpPrefs.bundle
+          cp -R "$BUNDLE" layout/Library/PreferenceBundles/
+          ls -la layout/Library/PreferenceBundles/
+
       - name: Build package
         run: |
           MAKE=gmake
