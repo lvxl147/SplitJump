@@ -4,6 +4,11 @@
 
 #import <Foundation/Foundation.h>
 
+// 见 SJCompat.h 的说明：Tweak.xm 是 Objective-C++，全局 C 变量需 C 链接
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 NS_ASSUME_NONNULL_BEGIN
 
 extern NSString *const SJSettingsDomain;   // com.lvxl524.splitjump
@@ -43,3 +48,7 @@ extern NSString *const SJReloadNotify;     // com.lvxl524.splitjump/ReloadPrefs
 @end
 
 NS_ASSUME_NONNULL_END
+
+#ifdef __cplusplus
+}
+#endif

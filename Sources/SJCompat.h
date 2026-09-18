@@ -11,6 +11,13 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
+// 必须：Tweak.xm 是 Objective-C++（clang++），而 .m 文件按 C 链接编译。
+// 不加 extern "C" 时头里的 C 函数声明会被 C++ 名字修饰，链接期报
+// "symbol(s) not found ... declaration possibly missing 'extern \"C\"'"。
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 NS_ASSUME_NONNULL_BEGIN
 
 /// 调用 target 上的 selName（参数按顺序放 args，支持 0~3 个参数）
@@ -40,3 +47,7 @@ void SJLog(NSString *format, ...) NS_FORMAT_FUNCTION(1, 2);
 void SJSetDebugEnabled(BOOL on);
 
 NS_ASSUME_NONNULL_END
+
+#ifdef __cplusplus
+}
+#endif
