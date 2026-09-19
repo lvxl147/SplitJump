@@ -104,9 +104,11 @@ jobs:
           t = re.sub(r'(?m)^Version:.*$', 'Version: ' + final, t)
           t = re.sub(r'(?m)^Depends:.*$', 'Depends: ' + depends, t)
           open(path, 'w', encoding='utf-8').write(t)
+          print('final version:', final, '| depends:', depends)
           PY
 
-          dpkg-deb -Zgzip -b /tmp/rebuild "packages/com.lvxl524.splitjump_${BASE_VER}_iphoneos-arm64.deb"
+          # 文件名必须带上 scheme，否则两个变体会互相覆盖
+          dpkg-deb -Zgzip -b /tmp/rebuild "packages/com.lvxl524.splitjump_${BASE_VER}_${SCHEME}_iphoneos-arm64.deb"
           ls -la packages/
 
       - name: Verify data archive and control
