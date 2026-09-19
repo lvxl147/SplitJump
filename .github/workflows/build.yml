@@ -68,6 +68,10 @@ jobs:
           rm -f packages/*.deb
           mkdir -p packages
 
+          # 版本号从 control 读取，避免这里写死后与 control 不一致
+          BASE_VER=$(python3 -c "import re;print(re.search(r'(?m)^Version:\s*(\S+)',open('layout/DEBIAN/control',encoding='utf-8').read()).group(1))")
+          echo "base version: $BASE_VER"
+
           make_variant() {
             local dir="$1" ver="$2" depends="$3" out="$4"
             rm -rf "$dir" && cp -R /tmp/rebuild "$dir"
@@ -82,13 +86,13 @@ jobs:
             dpkg-deb -Zgzip -b "$dir" "packages/$out"
           }
 
-          make_variant /tmp/v_rootless "1.3.0" \
+          make_variant /tmp/v_rootless "$BASE_VER" \
             "mobilesubstrate, preferenceloader, firmware (>= 15.0)" \
-            "com.lvxl524.splitjump_1.3.0_rootless_iphoneos-arm64.deb"
+            "com.lvxl524.splitjump_${BASE_VER}_rootless_iphoneos-arm64.deb"
 
-          make_variant /tmp/v_hidden "1.3.0+hidden" \
+          make_variant /tmp/v_hidden "${BASE_VER}+hidden" \
             "firmware (>= 15.0)" \
-            "com.lvxl524.splitjump_1.3.0+hidden_iphoneos-arm64.deb"
+            "com.lvxl524.splitjump_${BASE_VER}+hidden_iphoneos-arm64.deb"
 
           ls -la packages/
 
