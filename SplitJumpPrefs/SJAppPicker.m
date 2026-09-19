@@ -128,6 +128,22 @@ static dispatch_queue_t sjQueue(void)
 	return q;
 }
 
+#pragma mark - 类扩展与实现
+// 注意：类扩展和 @implementation 必须在这些类方法之前，
+// 否则后面所有方法都会报 missing context for method declaration。
+
+@interface SJAppPicker () <UISearchResultsUpdating>
+@property (nonatomic, strong) NSArray<SJInstalledApp *> *allApps;
+@property (nonatomic, strong) NSArray<SJInstalledApp *> *visibleApps;
+@property (nonatomic, strong) NSMutableOrderedSet<NSString *> *selected;
+@property (nonatomic, strong) UISearchController *search;
+@property (nonatomic, copy) NSString *pickerTitle;
+@property (nonatomic, assign) BOOL multi;
+@property (nonatomic, copy) void (^onFinish)(NSArray<NSString *> *);
+@end
+
+@implementation SJAppPicker
+
 + (void)buildCacheLocked
 {
 	NSMutableArray<SJInstalledApp *> *out = [NSMutableArray array];
