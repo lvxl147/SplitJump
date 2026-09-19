@@ -25,5 +25,4 @@ SplitJump_FRAMEWORKS = UIKit Foundation QuartzCore
 
 include $(THEOS_MAKE_PATH)/tweak.mk
 
-after-install::
-	install.exec "killall -9 SpringBoard" || true
+# 安装后不要自动注销 —— 由用户手动注销（需求明确）。

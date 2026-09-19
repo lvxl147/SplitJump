@@ -54,7 +54,10 @@ jobs:
 
       # macOS 上的 dpkg 默认用 lzma 压缩 data.tar；Sileo / Zebra 不支持 lzma，
       # 会表现为「无法解压 / 安装失败」。这里强制重打包为 gzip。
-      - name: Repack data archive as gzip
+      # 同时产出两个变体：
+      #   * rootless（无根）  ：Depends 带 mobilesubstrate / preferenceloader
+      #   * hidden-root（隐根）：Depends 只剩 firmware，任何 rootless 环境都能装
+      - name: Repack into rootless and hidden-root variants
         run: |
           set -e
           DEB=$(ls packages/*.deb | head -n1)
@@ -64,45 +67,70 @@ jobs:
           dpkg-deb -e "$DEB" /tmp/rebuild/DEBIAN
           rm -f packages/*.deb
           mkdir -p packages
-          dpkg-deb -Zgzip -b /tmp/rebuild "packages/$(basename "$DEB")"
+
+          make_variant() {
+            local dir="$1" ver="$2" depends="$3" out="$4"
+            rm -rf "$dir" && cp -R /tmp/rebuild "$dir"
+            python3 - "$dir/DEBIAN/control" "$ver" "$depends" <<'PY'
+          import re, sys
+          path, ver, depends = sys.argv[1], sys.argv[2], sys.argv[3]
+          t = open(path, encoding='utf-8').read()
+          t = re.sub(r'(?m)^Version:.*$', 'Version: ' + ver, t)
+          t = re.sub(r'(?m)^Depends:.*$', 'Depends: ' + depends, t)
+          open(path, 'w', encoding='utf-8').write(t)
+          PY
+            dpkg-deb -Zgzip -b "$dir" "packages/$out"
+          }
+
+          make_variant /tmp/v_rootless "1.3.0" \
+            "mobilesubstrate, preferenceloader, firmware (>= 15.0)" \
+            "com.lvxl524.splitjump_1.3.0_rootless_iphoneos-arm64.deb"
+
+          make_variant /tmp/v_hidden "1.3.0+hidden" \
+            "firmware (>= 15.0)" \
+            "com.lvxl524.splitjump_1.3.0+hidden_iphoneos-arm64.deb"
+
           ls -la packages/
 
-      - name: Verify data archive and control version
+      - name: Verify data archives and control versions
         run: |
           python3 - <<'PY'
           import glob, gzip, io, tarfile
 
-          deb = glob.glob('packages/*.deb')[0]
-          print('deb:', deb)
+          for deb in sorted(glob.glob('packages/*.deb')):
+              print('=== deb:', deb)
 
-          data = open(deb, 'rb').read()
-          assert data[:8] == b'!<arch>\n', 'not an ar archive'
+              data = open(deb, 'rb').read()
+              assert data[:8] == b'!<arch>\n', 'not an ar archive'
 
-          pos, members = 8, {}
-          while pos + 60 <= len(data):
-              name = data[pos:pos+16].decode('ascii', 'replace').strip().rstrip('/')
-              size = int(data[pos+48:pos+58].decode('ascii').strip())
-              members[name] = data[pos+60:pos+60+size]
-              pos += 60 + size + (size % 2)
+              pos, members = 8, {}
+              while pos + 60 <= len(data):
+                  name = data[pos:pos+16].decode('ascii', 'replace').strip().rstrip('/')
+                  size = int(data[pos+48:pos+58].decode('ascii').strip())
+                  members[name] = data[pos+60:pos+60+size]
+                  pos += 60 + size + (size % 2)
 
-          print('ar members:', sorted(members))
+              print('    ar members:', sorted(members))
 
-          if 'data.tar.lzma' in members:
-              raise SystemExit('FAIL: data.tar.lzma is not supported by Sileo')
-          assert 'data.tar.gz' in members, 'expected data.tar.gz, got %s' % sorted(members)
+              if 'data.tar.lzma' in members:
+                  raise SystemExit('FAIL: data.tar.lzma is not supported by Sileo')
+              assert 'data.tar.gz' in members, 'expected data.tar.gz, got %s' % sorted(members)
 
-          ctl_name = [k for k in members if k.startswith('control.tar')][0]
-          ctl_raw = members[ctl_name]
-          ctl_bytes = gzip.decompress(ctl_raw) if ctl_name.endswith('.gz') else ctl_raw
-          tf = tarfile.open(fileobj=io.BytesIO(ctl_bytes))
-          member = tf.extractfile('./control') or tf.extractfile('control')
-          text = member.read().decode('utf-8')
+              ctl_name = [k for k in members if k.startswith('control.tar')][0]
+              ctl_raw = members[ctl_name]
+              ctl_bytes = gzip.decompress(ctl_raw) if ctl_name.endswith('.gz') else ctl_raw
+              tf = tarfile.open(fileobj=io.BytesIO(ctl_bytes))
+              member = tf.extractfile('./control') or tf.extractfile('control')
+              text = member.read().decode('utf-8')
 
-          print('--- control ---')
-          print(text)
-          version = [l.split(':', 1)[1].strip() for l in text.splitlines()
-                     if l.startswith('Version:')][0]
-          print('OK: version =', version)
+              version = [l.split(':', 1)[1].strip() for l in text.splitlines()
+                         if l.startswith('Version:')][0]
+              depends = [l.split(':', 1)[1].strip() for l in text.splitlines()
+                         if l.startswith('Depends:')][0]
+              print('    version =', version)
+              print('    depends =', depends)
+
+          print('OK: both variants verified')
           PY
 
       - name: Upload deb artifact

@@ -1,8 +1,7 @@
 #!/bin/bash
 set -e
 
-# SplitJump (rootless) — pre-remove：让 SpringBoard 卸载 dylib
-killall -9 SpringBoard 2>/dev/null || true
-
-echo "SplitJump removed."
+# SplitJump (rootless) — pre-remove
+# 按需求：不自动注销，由用户手动注销让插件卸载生效。
+echo "SplitJump removed. 请手动注销（Respring）以彻底卸载。"
 exit 0

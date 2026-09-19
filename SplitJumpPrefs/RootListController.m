@@ -67,6 +67,12 @@ static NSString * const kCellRule   = @"SJRootRule";
 	    [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAdd
 	                                              target:self
 	                                              action:@selector(addRule)];
+
+	// 预热应用名 / 图标缓存，好了刷新主页（避免 cell 渲染期现场枚举全部应用）
+	__weak typeof(self) w = self;
+	[SJAppPicker warmUp:^{
+		[w reloadRules];
+	}];
 }
 
 - (void)viewWillAppear:(BOOL)animated

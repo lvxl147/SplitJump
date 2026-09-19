@@ -1,14 +1,18 @@
 //
 //  SJAppPicker.m
 //
-//  注意：Theos 对这个子工程默认开 -Werror，任何告警都会导致编译失败。
-//  所以这里不用 performSelector:（会触发 -Warc-performSelector-leaks），
-//  统一用 objc_msgSend 强转；也不要在 id 上直接取 .length（那是硬错误）。
+//  踩坑留档（v1.2.0 在「设置」里闪退的修复）：
+//   1. 之前用 ((id(*)(id,SEL))objc_msgSend)(obj, sel) 调私有方法 —— ARC 下编译器
+//      不认识这是 objc_msgSend，不会插入 retainAutoreleasedReturnValue，
+//      返回自动释放对象时存在悬垂 / 失衡风险。这里统一换成 NSInvocation（与主插件一致）。
+//   2. 之前在 cellForRow 里直接调 LSApplicationWorkspace（每行都枚举一次全部应用），
+//      现在改成后台枚举一次并缓存，cell 只查缓存。
+//   3. 图标私有方法全部包 @try，取不到就返回 nil。
+//   4. 本子工程默认 -Werror，别留未使用变量 / 废弃 API。
 //
 
 #import "SJAppPicker.h"
 #import <objc/runtime.h>
-#import <objc/message.h>
 #import <QuartzCore/QuartzCore.h>
 
 @interface SJInstalledApp : NSObject
@@ -19,104 +23,192 @@
 @implementation SJInstalledApp
 @end
 
-// 0 参 / 1 参的 objc_msgSend 强转（本文件只用到无参方法）
-static inline id SJSend0(id obj, SEL sel)
+#pragma mark - NSInvocation 安全调用（ARC 友好，不做 objc_msgSend 强转）
+
+static id SJPInvoke(id target, NSString *selName, NSArray *args)
 {
-	if (!obj || !sel) return nil;
-	return ((id(*)(id, SEL))objc_msgSend)(obj, sel);
+	if (!target || selName.length == 0) return nil;
+	SEL sel = NSSelectorFromString(selName);
+	if (!sel || ![target respondsToSelector:sel]) return nil;
+
+	NSMethodSignature *sig = [target methodSignatureForSelector:sel];
+	if (!sig) return nil;
+
+	NSUInteger want = args ? args.count : 0;
+	if (sig.numberOfArguments != want + 2) return nil;
+
+	NSInvocation *inv = [NSInvocation invocationWithMethodSignature:sig];
+	[inv setTarget:target];
+	[inv setSelector:sel];
+
+	for (NSUInteger i = 0; i < want; i++) {
+		id a = args[i];
+		NSUInteger idx = i + 2;
+		const char *t = [sig getArgumentTypeAtIndex:idx];
+		if (t[0] == '@') {
+			__unsafe_unretained id v = a;
+			[inv setArgument:&v atIndex:idx];
+		} else if (t[0] == 'c' || t[0] == 'B') {
+			BOOL v = [a boolValue];
+			[inv setArgument:&v atIndex:idx];
+		} else if (t[0] == 'i') {
+			int v = [a intValue];
+			[inv setArgument:&v atIndex:idx];
+		} else if (t[0] == 'q') {
+			long long v = [a longLongValue];
+			[inv setArgument:&v atIndex:idx];
+		} else if (t[0] == 'd') {
+			double v = [a doubleValue];
+			[inv setArgument:&v atIndex:idx];
+		} else {
+			__unsafe_unretained id v = a;
+			[inv setArgument:&v atIndex:idx];
+		}
+	}
+
+	@try {
+		[inv invoke];
+	} @catch (NSException *e) {
+		return nil;
+	}
+
+	if (sig.methodReturnType[0] != '@') return nil;
+	__unsafe_unretained id r = nil;
+	[inv getReturnValue:&r];
+	return r;
 }
 
 /// +[UIImage _applicationIconImageForBundleIdentifier:format:scale:]
 static UIImage *SJPAppIcon(NSString *bid)
 {
-	if (!bid.length) return nil;
+	if (bid.length == 0) return nil;
 	Class c = [UIImage class];
 	SEL sel = NSSelectorFromString(@"_applicationIconImageForBundleIdentifier:format:scale:");
 	Method m = class_getClassMethod(c, sel);
 	if (!m) return nil;
-	typedef UIImage *(*fn_t)(id, SEL, NSString *, int, double);
-	fn_t f = (fn_t)method_getImplementation(m);
+
+	NSMethodSignature *sig = [c methodSignatureForSelector:sel];
+	if (!sig || sig.numberOfArguments < 5) return nil;
+
+	NSInvocation *inv = [NSInvocation invocationWithMethodSignature:sig];
+	[inv setTarget:c];
+	[inv setSelector:sel];
+
+	__unsafe_unretained NSString *b = bid;
+	int format = 0;
 	double scale = [UIScreen mainScreen].scale;
 	if (scale <= 0) scale = 3.0;
-	return f((id)c, sel, bid, 0, scale);
+
+	[inv setArgument:&b atIndex:2];
+	[inv setArgument:&format atIndex:3];
+	[inv setArgument:&scale atIndex:4];
+
+	@try {
+		[inv invoke];
+	} @catch (NSException *e) {
+		return nil;
+	}
+
+	__unsafe_unretained UIImage *img = nil;
+	[inv getReturnValue:&img];
+	return img;
 }
 
-@interface SJAppPicker () <UISearchResultsUpdating>
-@property (nonatomic, strong) NSArray<SJInstalledApp *> *allApps;
-@property (nonatomic, strong) NSArray<SJInstalledApp *> *visibleApps;
-@property (nonatomic, strong) NSMutableOrderedSet<NSString *> *selected;
-@property (nonatomic, strong) UISearchController *search;
-@property (nonatomic, copy) NSString *pickerTitle;
-@property (nonatomic, assign) BOOL multi;
-@property (nonatomic, copy) void (^onFinish)(NSArray<NSString *> *);
-@end
+#pragma mark - 缓存
 
-@implementation SJAppPicker
+static NSArray<SJInstalledApp *> *sjAllApps = nil;
+static NSMutableDictionary<NSString *, NSString *> *sjNameCache = nil;
+static dispatch_queue_t sjQueue(void)
+{
+	static dispatch_queue_t q;
+	static dispatch_once_t once;
+	dispatch_once(&once, ^{
+		q = dispatch_queue_create("lvxl524.splitjump.appcache", DISPATCH_QUEUE_SERIAL);
+	});
+	return q;
+}
 
-#pragma mark - 应用枚举
-
-+ (NSArray<SJInstalledApp *> *)enumerateApps
++ (void)buildCacheLocked
 {
 	NSMutableArray<SJInstalledApp *> *out = [NSMutableArray array];
+	NSMutableDictionary<NSString *, NSString *> *names = [NSMutableDictionary dictionary];
 
-	Class cls = NSClassFromString(@"LSApplicationWorkspace");
-	if (!cls) return out;
-	id ws = SJSend0((id)cls, NSSelectorFromString(@"defaultWorkspace"));
-	if (!ws) return out;
+	@try {
+		Class cls = NSClassFromString(@"LSApplicationWorkspace");
+		id ws = cls ? SJPInvoke((id)cls, @"defaultWorkspace", @[]) : nil;
+		NSArray *all = ws ? SJPInvoke(ws, @"allInstalledApplications", @[]) : nil;
 
-	NSArray *all = SJSend0(ws, NSSelectorFromString(@"allInstalledApplications"));
-	if (![all isKindOfClass:[NSArray class]]) return out;
+		if ([all isKindOfClass:[NSArray class]]) {
+			for (id proxy in all) {
+				NSString *bid = SJPInvoke(proxy, @"bundleIdentifier", @[]);
+				if (![bid isKindOfClass:[NSString class]] || bid.length == 0) continue;
 
-	for (id proxy in all) {
-		SEL bidSel = NSSelectorFromString(@"bundleIdentifier");
-		if (![proxy respondsToSelector:bidSel]) continue;
+				NSString *name = nil;
+				for (NSString *k in @[ @"localizedShortName", @"localizedName", @"itemName" ]) {
+					NSString *v = SJPInvoke(proxy, k, @[]);
+					if ([v isKindOfClass:[NSString class]] && v.length > 0) { name = v; break; }
+				}
+				if (name.length == 0) name = bid;
 
-		NSString *bid = SJSend0(proxy, bidSel);
-		if (![bid isKindOfClass:[NSString class]]) continue;
+				NSString *type = SJPInvoke(proxy, @"applicationType", @[]);
+				BOOL user = [type isKindOfClass:[NSString class]]
+				    ? [type isEqualToString:@"User"] : YES;
 
-		NSString *name = nil;
-		for (NSString *k in @[ @"localizedShortName", @"localizedName", @"itemName" ]) {
-			SEL s = NSSelectorFromString(k);
-			if (![proxy respondsToSelector:s]) continue;
-			NSString *v = SJSend0(proxy, s);
-			if ([v isKindOfClass:[NSString class]] && v.length > 0) { name = v; break; }
+				SJInstalledApp *a = [[SJInstalledApp alloc] init];
+				a.bundleID = bid;
+				a.name = name;
+				a.isUser = user;
+				[out addObject:a];
+
+				names[bid] = name;
+			}
 		}
-		if (name.length == 0) name = bid;
-
-		BOOL user = YES;
-		SEL t = NSSelectorFromString(@"applicationType");
-		if ([proxy respondsToSelector:t]) {
-			NSString *v = SJSend0(proxy, t);
-			if ([v isKindOfClass:[NSString class]]) user = [v isEqualToString:@"User"];
-		}
-
-		SJInstalledApp *a = [[SJInstalledApp alloc] init];
-		a.bundleID = bid;
-		a.name = name;
-		a.isUser = user;
-		[out addObject:a];
+	} @catch (NSException *e) {
+		// 枚举失败就保持空缓存：面板仍可用，只是显示包名
 	}
 
 	[out sortUsingComparator:^NSComparisonResult(SJInstalledApp *x, SJInstalledApp *y) {
 		return [x.name caseInsensitiveCompare:y.name];
 	}];
-	return out;
+
+	sjAllApps = out;
+	sjNameCache = names;
 }
 
-#pragma mark - 对外取值助手
+#pragma mark - 对外
+
++ (void)warmUp:(void (^)(void))done
+{
+	dispatch_async(sjQueue(), ^{
+		if (!sjAllApps) [self buildCacheLocked];
+		if (done) dispatch_async(dispatch_get_main_queue(), done);
+	});
+}
 
 + (NSString *)displayNameForBundleID:(NSString *)bundleID
 {
 	if (bundleID.length == 0) return @"";
-	for (SJInstalledApp *a in [self enumerateApps]) {
-		if ([a.bundleID isEqualToString:bundleID]) return a.name;
-	}
-	return bundleID;
+	NSString *n = sjNameCache[bundleID];
+	return n.length > 0 ? n : bundleID;
 }
 
 + (UIImage *)iconForBundleID:(NSString *)bundleID
 {
-	return SJPAppIcon(bundleID);
+	if (bundleID.length == 0) return nil;
+	@try {
+		return SJPAppIcon(bundleID);
+	} @catch (NSException *e) {
+		return nil;
+	}
+}
+
++ (NSArray<SJInstalledApp *> *)userApps
+{
+	NSMutableArray<SJInstalledApp *> *out = [NSMutableArray array];
+	for (SJInstalledApp *a in sjAllApps) {
+		if (a.isUser) [out addObject:a];
+	}
+	return out;
 }
 
 #pragma mark - 入口
@@ -153,7 +245,6 @@ static UIImage *SJPAppIcon(NSString *bid)
 		                                    action:@selector(finishTapped)];
 	}
 
-	// 搜索框：按名称 / 包名过滤
 	UISearchController *sc =
 	    [[UISearchController alloc] initWithSearchResultsController:nil];
 	sc.searchResultsUpdater = self;
@@ -163,17 +254,16 @@ static UIImage *SJPAppIcon(NSString *bid)
 	self.tableView.tableHeaderView = sc.searchBar;
 	self.definesPresentationContext = YES;
 
-	// 已装应用可能不少，枚举放后台线程，回主线程刷新
 	self.visibleApps = @[];
 	[self.tableView reloadData];
-	dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-		NSArray<SJInstalledApp *> *apps = [SJAppPicker enumerateApps];
-		dispatch_async(dispatch_get_main_queue(), ^{
-			self.allApps = apps;
-			self.visibleApps = apps;
-			[self.tableView reloadData];
-		});
-	});
+
+	// 后台取列表，好了回主线程刷新（不阻塞、不闪退）
+	__weak typeof(self) w = self;
+	[SJAppPicker warmUp:^{
+		w.allApps = [SJAppPicker userApps];
+		w.visibleApps = w.allApps;
+		[w.tableView reloadData];
+	}];
 }
 
 - (void)viewWillDisappear:(BOOL)animated
@@ -203,7 +293,6 @@ static UIImage *SJPAppIcon(NSString *bid)
 
 - (void)finishTapped
 {
-	// NSOrderedSet 不是 NSArray，这里显式转成数组再回调
 	NSArray<NSString *> *out = [self.selected array];
 	void (^cb)(NSArray<NSString *> *) = self.onFinish;
 	[self.navigationController popViewControllerAnimated:YES];
@@ -240,10 +329,12 @@ static UIImage *SJPAppIcon(NSString *bid)
 	}
 
 	SJInstalledApp *a = self.visibleApps[ip.row];
+	if (!a) return cell;
+
 	cell.textLabel.text = a.name;
 	cell.detailTextLabel.text = a.bundleID;
 	cell.detailTextLabel.textColor = [UIColor secondaryLabelColor];
-	cell.imageView.image = SJPAppIcon(a.bundleID); // 取不到就留空
+	cell.imageView.image = [SJAppPicker iconForBundleID:a.bundleID];
 
 	if (self.multi) {
 		BOOL on = [self.selected containsObject:a.bundleID];

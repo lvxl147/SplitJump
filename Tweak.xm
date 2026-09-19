@@ -270,12 +270,23 @@ static void SJBeginIntercept(SJRule *rule, NSString *source, NSString *url, void
 		return;
 	}
 
-	NSString *target = SJTargetBundleIDFromRequest(request);
-	NSDictionary *options = SJOptionsFromRequest(request);
+	NSString *target = nil;
+	NSDictionary *options = nil;
 	NSString *src = nil, *url = nil;
 	SJRule *rule = nil;
+	BOOL should = NO;
 
-	if (!SJShouldIntercept(target, options, &src, &url, &rule)) {
+	// 决策阶段全部兜底：任何异常都直接放行，绝不能把 SpringBoard 带崩
+	@try {
+		target = SJTargetBundleIDFromRequest(request);
+		options = SJOptionsFromRequest(request);
+		should = SJShouldIntercept(target, options, &src, &url, &rule);
+	} @catch (NSException *e) {
+		SJLog(@"DOWNSTREAM decide threw: %@", e);
+		should = NO;
+	}
+
+	if (!should) {
 		%orig;
 		return;
 	}
@@ -321,8 +332,17 @@ static void SJActivateReplacement(id self, SEL _cmd, id bundleID, id requestID, 
 	NSDictionary *opts = [options isKindOfClass:[NSDictionary class]] ? options : nil;
 	NSString *src = nil, *url = nil;
 	SJRule *rule = nil;
+	BOOL should = NO;
 
-	if (!SJShouldIntercept(target, opts, &src, &url, &rule)) {
+	// 决策阶段全部兜底：任何异常都直接放行，绝不能把 SpringBoard 带崩
+	@try {
+		should = SJShouldIntercept(target, opts, &src, &url, &rule);
+	} @catch (NSException *e) {
+		SJLog(@"UPSTREAM decide threw: %@", e);
+		should = NO;
+	}
+
+	if (!should) {
 		orig(self, _cmd, bundleID, requestID, isTrusted, options, source, originalSource, result);
 		return;
 	}
