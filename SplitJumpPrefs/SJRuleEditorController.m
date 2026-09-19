@@ -227,7 +227,10 @@ static NSString * const kRuleFlagKeys[] = {
 
 - (UITableViewCell *)tableView:(UITableView *)tv cellForRowAtIndexPath:(NSIndexPath *)ip
 {
-	NSString *rid = [NSString stringWithFormat:@"SJRuleEdit%ld", (long)ip.section];
+	// 第 2 节的三个开关行各自独立复用 id，避免复用串状态（见下方说明）
+	NSString *rid = (ip.section == 2)
+	    ? [NSString stringWithFormat:@"SJFlag-%ld", (long)ip.row]
+	    : [NSString stringWithFormat:@"SJRuleEdit%ld", (long)ip.section];
 	UITableViewCell *cell = [tv dequeueReusableCellWithIdentifier:rid];
 	if (!cell) {
 		cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle
@@ -273,17 +276,22 @@ static NSString * const kRuleFlagKeys[] = {
 		if (ip.row == 1) { title = @"显示目标拦截应用"; value = self.flagShowTarget; }
 		if (ip.row == 2) { title = @"兼容 Crane 容器";  value = self.flagEnableCrane; }
 
+		// 关键修复（v1.4.0「开关关不了」的根因）：
+		// 三个开关行共用一个复用 id 时，复用会让别行的开关绑到本行，
+		// 并且每次 dequeue 都回写 sw.on，把用户刚点下的状态覆盖掉。
+		// 现在每行用【独立复用 id】，且 sw.on 只在创建 cell 时设置一次。
 		UISwitch *sw = (UISwitch *)cell.accessoryView;
 		if (!sw) {
 			sw = [[UISwitch alloc] initWithFrame:CGRectZero];
+			sw.tag = ip.row + 1;
+			sw.on = value;
 			[sw addTarget:self action:@selector(flagChanged:)
 			     forControlEvents:UIControlEventValueChanged];
 			cell.accessoryView = sw;
 		}
-		sw.tag = ip.row + 1;
-		sw.on = value;
 		cell.textLabel.text = title;
 		cell.imageView.image = nil;
+		cell.detailTextLabel.text = nil;
 		return cell;
 	}
 

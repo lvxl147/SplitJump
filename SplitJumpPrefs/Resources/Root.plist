@@ -97,6 +97,11 @@
 		</dict>
 		<dict>
 			<key>cell</key><string>PSButtonCell</string>
+			<key>label</key><string>导出日志</string>
+			<key>action</key><string>exportLogs</string>
+		</dict>
+		<dict>
+			<key>cell</key><string>PSButtonCell</string>
 			<key>label</key><string>注销 SpringBoard（Respring）</string>
 			<key>action</key><string>respringNow</string>
 		</dict>

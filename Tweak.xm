@@ -359,6 +359,32 @@ static void SJActivateReplacement(id self, SEL _cmd, id bundleID, id requestID, 
 	});
 }
 
+// 校验 _activateBundleID:… 的类型编码是否与我们假设的 7 参签名一致。
+// 不一致就绝不能装 —— 装了之后哪怕只是「透传」，用错误的参数个数/类型调原实现
+// 也会破坏调用约定，SpringBoard 会在每次启动 App 时崩掉（表现为「点设置闪退」）。
+static BOOL SJActivateSignatureMatches(Method m, NSString **outEncoding)
+{
+	const char *enc = m ? method_getTypeEncoding(m) : NULL;
+	if (outEncoding) *outEncoding = enc ? [NSString stringWithUTF8String:enc] : nil;
+	if (!enc || enc[0] != 'v') return NO;
+
+	NSMethodSignature *sig = [NSMethodSignature signatureWithObjCTypes:enc];
+	if (!sig || sig.numberOfArguments != 9) return NO; // self + _cmd + 7 个参数
+
+	// 期望：bundleID(@) requestID(@) isTrusted(B/c) options(@) source(@)
+	//       originalSource(@) withResult(block @?)
+	for (int i = 0; i < 7; i++) {
+		const char *t = [sig getArgumentTypeAtIndex:i + 2];
+		if (!t) return NO;
+		if (i == 2) { // isTrusted
+			if (t[0] != 'B' && t[0] != 'c') return NO;
+		} else {
+			if (t[0] != '@') return NO;
+		}
+	}
+	return YES;
+}
+
 static BOOL SJInstallEarlyHook(void)
 {
 	Class cls = objc_getClass("SBMainWorkspace");
@@ -369,8 +395,20 @@ static BOOL SJInstallEarlyHook(void)
 
 	SEL sel = NSSelectorFromString(kSJActivateSelector);
 	Method m = sel ? class_getInstanceMethod(cls, sel) : NULL;
-	if (!m) {
-		SJLog(@"early hook: %@ not present on this iOS -> skipped", kSJActivateSelector);
+	NSString *enc = nil;
+	BOOL sigOK = SJActivateSignatureMatches(m, &enc);
+
+	if (!m || !sigOK) {
+		// 编码不符 → 绝不安装。把实际编码写进日志，便于适配。
+		SJLog(@"early hook: signature mismatch (%@) -> skipped, encoding=%@",
+		      m ? @"wrong arity/types" : @"method missing", enc ?: @"(null)");
+		return NO;
+	}
+
+	// 只在用户开启「提早拦截」时才安装。默认关 —— 这样即使签名有意外，
+	// 没开开关也绝不会崩；同时避免「装完就崩、连面板都进不去」的死局。
+	if (![SJSettings shared].earlyHook) {
+		SJLog(@"early hook: disabled in settings -> not installed (encoding=%@)", enc);
 		return NO;
 	}
 
@@ -381,9 +419,8 @@ static BOOL SJInstallEarlyHook(void)
 
 	Method after = class_getInstanceMethod(cls, sel);
 	IMP now = after ? method_getImplementation(after) : NULL;
-	SJLog(@"early hook installed: outermost=%@ encoding=%s",
-	      (now == (IMP)SJActivateReplacement) ? @"YES" : @"NO",
-	      (after && method_getTypeEncoding(after)) ? method_getTypeEncoding(after) : "(null)");
+	SJLog(@"early hook installed: outermost=%@ encoding=%@",
+	      (now == (IMP)SJActivateReplacement) ? @"YES" : @"NO", enc);
 	return YES;
 }
 
@@ -396,7 +433,8 @@ static void SJReloadPrefs(void)
 	NSDictionary *d = [[NSUserDefaults standardUserDefaults]
 	    persistentDomainForName:SJSettingsDomain];
 	id dbg = d[@"DebugLog"];
-	BOOL debugOn = [dbg isKindOfClass:[NSNumber class]] ? [dbg boolValue] : NO;
+	// 诊断版默认开日志（用户可以在面板里关）。键缺失时视为开。
+	BOOL debugOn = dbg == nil ? YES : ([dbg isKindOfClass:[NSNumber class]] ? [dbg boolValue] : NO);
 	SJSetDebugEnabled(debugOn);
 
 	SJSettings *s = [SJSettings shared];

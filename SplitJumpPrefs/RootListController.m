@@ -22,6 +22,17 @@
 
 @implementation SplitJumpRootListController
 
+// 诊断：证明本 bundle 已被「设置」进程加载成功（以及加载时间）。
+// 如果「设置」一打开就崩且这里没有日志，说明崩在 dyld 加载阶段（缺符号等），
+// 而不是我们的代码 —— 这是定位闪退最关键的一行。
++ (void)load
+{
+	@try {
+		[SJRuleStore appendSettingsLog:@"+load: SplitJumpPrefs loaded into Settings"];
+	} @catch (NSException *e) {
+	}
+}
+
 - (id)specifiers
 {
 	// _specifiers 来自 PSListController（见文件头注释 2），不要重复声明
@@ -35,8 +46,24 @@
 {
 	[super viewWillAppear:animated];
 	[self reloadSpecifiers];
+	[SJRuleStore appendSettingsLog:@"viewWillAppear: 主页已打开"];
 	// 预热应用名 / 图标缓存（后台），规则列表与选择器打开时直接可用
 	[SJAppPicker warmUp:nil];
+}
+
+#pragma mark - 日志导出
+
+- (void)exportLogs
+{
+	NSString *msg = [SJRuleStore exportLogs];
+	UIAlertController *alert =
+	    [UIAlertController alertControllerWithTitle:@"导出日志"
+	                                        message:msg
+	                                 preferredStyle:UIAlertControllerStyleAlert];
+	[alert addAction:[UIAlertAction actionWithTitle:@"知道了"
+	                                          style:UIAlertActionStyleDefault
+	                                        handler:nil]];
+	[self presentViewController:alert animated:YES completion:nil];
 }
 
 #pragma mark - 动作

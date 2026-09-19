@@ -38,11 +38,18 @@ NS_ASSUME_NONNULL_BEGIN
 + (BOOL)boolForKey:(NSString *)key defaultValue:(BOOL)def;
 + (void)setBool:(BOOL)value forKey:(NSString *)key;
 
-#pragma mark 其它
-
 /// 请求注销：只发 Darwin 通知，由 SpringBoard 进程里的插件自己结束自己
 /// （「设置」进程没有权限杀别的进程）
 + (void)requestRespring;
+
+#pragma mark 日志
+
+/// 追加一行设置侧日志（诊断「设置」闪退用）。写失败静默忽略。
++ (void)appendSettingsLog:(NSString *)line;
+
+/// 把插件日志 + 设置侧日志复制到 /var/mobile/Documents/SplitJump-Logs/，
+/// 返回该目录（用 Filza 直接能拿到，方便发给开发者）。
++ (NSString *)exportLogs;
 
 /// 写完偏好后调用：通知 SpringBoard 里的插件立即重载
 + (void)notify;

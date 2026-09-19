@@ -7,7 +7,16 @@ on:
 
 jobs:
   build:
+    # 一次构建产出两个包：无根（rootless）与 隐根（roothide）。
+    # 隐根必须用 THEOS_PACKAGE_SCHEME=roothide 构建 —— 路径会被重写到
+    # RootHide 的隐藏 jbroot，用户不再需要手动转换 rootless 包。
+    # 参考：EchoReborn（lvxl147）的 CI 就是这么做的。
+    name: Build (${{ matrix.scheme }})
     runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        scheme: [ rootless, roothide ]
     env:
       THEOS: ${{ github.workspace }}/theos
 
@@ -25,15 +34,18 @@ jobs:
 
       # 设置面板是 PreferenceBundle，不能用 Theos 的 subproject 机制
       # （subproject 要求产出 *.subproject.a，bundle 不产出，会让主 dylib 链接失败）。
-      # 这里单独构建，再把产物拷进主工程的 layout/，随主包一起打包。
+      # 这里按同一 scheme 单独构建，再把产物拷进主工程的 layout/ 一起打包。
+      # 注意：切 scheme 必须先 clean，否则 .theos 里的旧产物会串。
       - name: Build prefs bundle
         run: |
           MAKE=gmake
           command -v gmake >/dev/null 2>&1 || MAKE=make
-          (cd SplitJumpPrefs && "$MAKE" THEOS_PACKAGE_SCHEME=rootless)
+          SCHEME=${{ matrix.scheme }}
+          (cd SplitJumpPrefs && "$MAKE" clean THEOS_PACKAGE_SCHEME=$SCHEME) || true
+          (cd SplitJumpPrefs && "$MAKE" THEOS_PACKAGE_SCHEME=$SCHEME)
           BUNDLE=$(find SplitJumpPrefs -type d -name "SplitJumpPrefs.bundle" | head -n1)
           if [ -z "$BUNDLE" ]; then
-            echo "prefs bundle not found:"
+            echo "::error::prefs bundle not found"
             find SplitJumpPrefs -name '*.bundle'
             exit 1
           fi
@@ -42,24 +54,27 @@ jobs:
           mkdir -p layout/Library/PreferenceBundles
           rm -rf layout/Library/PreferenceBundles/SplitJumpPrefs.bundle
           cp -R "$BUNDLE" layout/Library/PreferenceBundles/
-          ls -la layout/Library/PreferenceBundles/
 
       - name: Build package
         run: |
           MAKE=gmake
           command -v gmake >/dev/null 2>&1 || MAKE=make
-          echo "using $MAKE"
-          "$MAKE" package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless
+          SCHEME=${{ matrix.scheme }}
+          echo "scheme: $SCHEME"
+          "$MAKE" clean package THEOS_PACKAGE_SCHEME=$SCHEME FINALPACKAGE=1
           ls -la packages/
 
-      # macOS 上的 dpkg 默认用 lzma 压缩 data.tar；Sileo / Zebra 不支持 lzma，
-      # 会表现为「无法解压 / 安装失败」。这里强制重打包为 gzip。
-      # 同时产出两个变体：
-      #   * rootless（无根）  ：Depends 带 mobilesubstrate / preferenceloader
-      #   * hidden-root（隐根）：Depends 只剩 firmware，任何 rootless 环境都能装
-      - name: Repack into rootless and hidden-root variants
+      # macOS 的 dpkg 默认产出 data.tar.lzma，Sileo / Zebra 不支持 → 强制 gzip。
+      # 同时按 scheme 写 Depends：roothide 只依赖 firmware，避免装不上。
+      - name: Repack as gzip and set Depends
         run: |
           set -e
+          SCHEME=${{ matrix.scheme }}
+          case "$SCHEME" in
+            roothide) DEPENDS="firmware (>= 15.0)" ;;
+            *)        DEPENDS="mobilesubstrate, preferenceloader, firmware (>= 15.0)" ;;
+          esac
+
           DEB=$(ls packages/*.deb | head -n1)
           echo "source deb: $DEB"
           rm -rf /tmp/rebuild && mkdir -p /tmp/rebuild
@@ -68,78 +83,58 @@ jobs:
           rm -f packages/*.deb
           mkdir -p packages
 
-          # 版本号从 control 读取，避免这里写死后与 control 不一致
           BASE_VER=$(python3 -c "import re;print(re.search(r'(?m)^Version:\s*(\S+)',open('layout/DEBIAN/control',encoding='utf-8').read()).group(1))")
-          echo "base version: $BASE_VER"
+          echo "base version: $BASE_VER / scheme: $SCHEME / depends: $DEPENDS"
 
-          make_variant() {
-            local dir="$1" ver="$2" depends="$3" out="$4"
-            rm -rf "$dir" && cp -R /tmp/rebuild "$dir"
-            python3 - "$dir/DEBIAN/control" "$ver" "$depends" <<'PY'
+          python3 - /tmp/rebuild/DEBIAN/control "$BASE_VER" "$DEPENDS" "$SCHEME" <<'PY'
           import re, sys
-          path, ver, depends = sys.argv[1], sys.argv[2], sys.argv[3]
+          path, ver, depends, scheme = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
           t = open(path, encoding='utf-8').read()
-          t = re.sub(r'(?m)^Version:.*$', 'Version: ' + ver, t)
+          final = ver if scheme == 'rootless' else ver + '+hidden'
+          t = re.sub(r'(?m)^Version:.*$', 'Version: ' + final, t)
           t = re.sub(r'(?m)^Depends:.*$', 'Depends: ' + depends, t)
           open(path, 'w', encoding='utf-8').write(t)
           PY
-            dpkg-deb -Zgzip -b "$dir" "packages/$out"
-          }
 
-          make_variant /tmp/v_rootless "$BASE_VER" \
-            "mobilesubstrate, preferenceloader, firmware (>= 15.0)" \
-            "com.lvxl524.splitjump_${BASE_VER}_rootless_iphoneos-arm64.deb"
-
-          make_variant /tmp/v_hidden "${BASE_VER}+hidden" \
-            "firmware (>= 15.0)" \
-            "com.lvxl524.splitjump_${BASE_VER}+hidden_iphoneos-arm64.deb"
-
+          dpkg-deb -Zgzip -b /tmp/rebuild "packages/com.lvxl524.splitjump_${BASE_VER}_iphoneos-arm64.deb"
           ls -la packages/
 
-      - name: Verify data archives and control versions
+      - name: Verify data archive and control
         run: |
           python3 - <<'PY'
           import glob, gzip, io, tarfile
 
-          for deb in sorted(glob.glob('packages/*.deb')):
-              print('=== deb:', deb)
+          deb = glob.glob('packages/*.deb')[0]
+          print('=== deb:', deb)
 
-              data = open(deb, 'rb').read()
-              assert data[:8] == b'!<arch>\n', 'not an ar archive'
+          data = open(deb, 'rb').read()
+          assert data[:8] == b'!<arch>\n', 'not an ar archive'
 
-              pos, members = 8, {}
-              while pos + 60 <= len(data):
-                  name = data[pos:pos+16].decode('ascii', 'replace').strip().rstrip('/')
-                  size = int(data[pos+48:pos+58].decode('ascii').strip())
-                  members[name] = data[pos+60:pos+60+size]
-                  pos += 60 + size + (size % 2)
+          pos, members = 8, {}
+          while pos + 60 <= len(data):
+              name = data[pos:pos+16].decode('ascii', 'replace').strip().rstrip('/')
+              size = int(data[pos+48:pos+58].decode('ascii').strip())
+              members[name] = data[pos+60:pos+60+size]
+              pos += 60 + size + (size % 2)
 
-              print('    ar members:', sorted(members))
+          print('    ar members:', sorted(members))
+          if 'data.tar.lzma' in members:
+              raise SystemExit('FAIL: data.tar.lzma is not supported by Sileo')
+          assert 'data.tar.gz' in members, 'expected data.tar.gz'
 
-              if 'data.tar.lzma' in members:
-                  raise SystemExit('FAIL: data.tar.lzma is not supported by Sileo')
-              assert 'data.tar.gz' in members, 'expected data.tar.gz, got %s' % sorted(members)
-
-              ctl_name = [k for k in members if k.startswith('control.tar')][0]
-              ctl_raw = members[ctl_name]
-              ctl_bytes = gzip.decompress(ctl_raw) if ctl_name.endswith('.gz') else ctl_raw
-              tf = tarfile.open(fileobj=io.BytesIO(ctl_bytes))
-              member = tf.extractfile('./control') or tf.extractfile('control')
-              text = member.read().decode('utf-8')
-
-              version = [l.split(':', 1)[1].strip() for l in text.splitlines()
-                         if l.startswith('Version:')][0]
-              depends = [l.split(':', 1)[1].strip() for l in text.splitlines()
-                         if l.startswith('Depends:')][0]
-              print('    version =', version)
-              print('    depends =', depends)
-
-          print('OK: both variants verified')
+          ctl_name = [k for k in members if k.startswith('control.tar')][0]
+          ctl_raw = members[ctl_name]
+          ctl_bytes = gzip.decompress(ctl_raw) if ctl_name.endswith('.gz') else ctl_raw
+          tf = tarfile.open(fileobj=io.BytesIO(ctl_bytes))
+          member = tf.extractfile('./control') or tf.extractfile('control')
+          text = member.read().decode('utf-8')
+          print(text)
+          print('OK')
           PY
 
       - name: Upload deb artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SplitJump-deb
+          name: SplitJump-deb-${{ matrix.scheme }}
           path: packages/*.deb
           if-no-files-found: error
