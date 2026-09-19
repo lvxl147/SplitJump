@@ -1,10 +1,11 @@
 //
-//  SJRuleListController.m
+//  SJRuleListController.m — 拦截规则列表
 //
-//  界面结构（对齐 JumpSelect 的使用习惯）：
-//    · 放行黑名单 —— 点进去多选应用，名单内的 App 发起跳转时直接放行
-//    · 拦截规则  —— 每条规则 = 一个「被拦截的目标应用」+ 若干「列表应用」
-//                  右上角 + 新建，点某条进入编辑，左滑删除
+//  这是 push 进来的普通 UITableViewController（主页保持 PSListController，
+//  见 RootListController.h 的说明），所以这里可以自由做动态行。
+//
+//  每条规则显示目标应用的图标 / 名称 / 候选数；右上角 + 新建；
+//  点某条进入编辑；左滑删除。
 //
 
 #import "SJRuleListController.h"
@@ -12,11 +13,10 @@
 #import "SJAppPicker.h"
 #import "SJRuleEditorController.h"
 
-static NSString *const kCellID = @"SJRuleCell";
+static NSString * const kCellID = @"SJRuleCell";
 
 @interface SJRuleListController ()
 @property (nonatomic, strong) NSMutableArray<NSDictionary *> *rules;
-@property (nonatomic, strong) NSArray<NSString *> *blacklist;
 @end
 
 @implementation SJRuleListController
@@ -27,7 +27,6 @@ static NSString *const kCellID = @"SJRuleCell";
 	if (self) {
 		self.title = @"拦截规则";
 		self.rules = [[SJRuleStore loadRules] mutableCopy];
-		self.blacklist = [SJRuleStore loadBlacklist];
 	}
 	return self;
 }
@@ -35,6 +34,7 @@ static NSString *const kCellID = @"SJRuleCell";
 - (void)viewDidLoad
 {
 	[super viewDidLoad];
+	self.tableView.rowHeight = 56;
 	self.navigationItem.rightBarButtonItem =
 	    [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAdd
 	                                              target:self
@@ -44,13 +44,13 @@ static NSString *const kCellID = @"SJRuleCell";
 - (void)viewWillAppear:(BOOL)animated
 {
 	[super viewWillAppear:animated];
-	[self reloadData];
+	[self reloadRules];
+	[SJAppPicker warmUp:nil];
 }
 
-- (void)reloadData
+- (void)reloadRules
 {
 	self.rules = [[SJRuleStore loadRules] mutableCopy];
-	self.blacklist = [SJRuleStore loadBlacklist];
 	[self.tableView reloadData];
 }
 
@@ -61,52 +61,25 @@ static NSString *const kCellID = @"SJRuleCell";
 	SJRuleEditorController *vc = [[SJRuleEditorController alloc] initWithRule:nil];
 	__weak typeof(self) w = self;
 	vc.onSaved = ^{
-		[w reloadData];
+		[w reloadRules];
 	};
 	[self.navigationController pushViewController:vc animated:YES];
 }
 
-- (void)editBlacklist
-{
-	__weak typeof(self) w = self;
-	[SJAppPicker presentFrom:self
-	                   title:@"放行黑名单（这些 App 发起跳转时不弹窗）"
-	                     multi:YES
-	                preselected:[NSSet setWithArray:self.blacklist]
-	                   onFinish:^(NSArray<NSString *> *ids) {
-		                   // 默认始终保留 SpringBoard，否则桌面点图标也会弹窗
-		                   NSMutableArray *out = [ids mutableCopy];
-		                   if (![out containsObject:@"com.apple.springboard"]) {
-			                   [out insertObject:@"com.apple.springboard" atIndex:0];
-		                   }
-		                   [SJRuleStore saveBlacklist:out];
-		                   [w reloadData];
-	                   }];
-}
-
 #pragma mark - Table
 
-- (NSInteger)numberOfSectionsInTableView:(UITableView *)tv { return 2; }
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tv { return 1; }
 
 - (NSInteger)tableView:(UITableView *)tv numberOfRowsInSection:(NSInteger)section
 {
-	if (section == 0) return 1;
 	return self.rules.count ? (NSInteger)self.rules.count : 1;
-}
-
-- (NSString *)tableView:(UITableView *)tv titleForHeaderInSection:(NSInteger)section
-{
-	return section == 0 ? @"放行黑名单" : @"拦截规则";
 }
 
 - (NSString *)tableView:(UITableView *)tv titleForFooterInSection:(NSInteger)section
 {
-	if (section == 0) {
-		return @"名单内的 App 尝试唤起被拦截目标时，直接放行、不弹窗。"
-		       @"com.apple.springboard 始终保留，避免桌面点图标也弹窗。";
-	}
-	return @"每条规则：被拦截的目标应用 + 弹窗里供你选择的列表应用。"
-	       @"一般列表应用就填该应用的各个多开分身。";
+	return self.rules.count
+	    ? @"点某条规则可编辑，左滑可删除。修改后立即生效，无需注销。"
+	    : @"还没有拦截规则。点击右上角 + 新建一条。";
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tv cellForRowAtIndexPath:(NSIndexPath *)ip
@@ -118,18 +91,9 @@ static NSString *const kCellID = @"SJRuleCell";
 		cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
 	}
 
-	if (ip.section == 0) {
-		cell.textLabel.text = [NSString stringWithFormat:@"放行黑名单（%lu 个）",
-		                       (unsigned long)self.blacklist.count];
-		cell.detailTextLabel.text = [self.blacklist componentsJoinedByString:@", "];
-		cell.imageView.image = nil;
-		return cell;
-	}
-
-	if (!self.rules.count) {
+	if (self.rules.count == 0) {
 		cell.textLabel.text = @"暂无规则";
-		cell.detailTextLabel.text = @"点击右上角 + 添加拦截规则";
-		cell.detailTextLabel.textColor = [UIColor secondaryLabelColor];
+		cell.detailTextLabel.text = nil;
 		cell.imageView.image = nil;
 		cell.accessoryType = UITableViewCellAccessoryNone;
 		return cell;
@@ -137,14 +101,19 @@ static NSString *const kCellID = @"SJRuleCell";
 
 	NSDictionary *r = self.rules[ip.row];
 	NSString *target = r[@"target"];
-	NSArray *cands = r[@"candidates"] ?: @[];
-	NSString *name = [SJAppPicker displayNameForBundleID:target];
+	NSString *bid = [target isKindOfClass:[NSString class]] ? target : @"";
+	NSArray *cands = [r[@"candidates"] isKindOfClass:[NSArray class]] ? r[@"candidates"] : @[];
+	NSString *name = [SJAppPicker displayNameForBundleID:bid];
 
-	cell.textLabel.text = name;
+	BOOL dj = [r[@"directJump"] boolValue];
+	cell.textLabel.text = dj ? [name stringByAppendingString:@"（直接跳转）"] : name;
 	cell.detailTextLabel.text =
-	    [NSString stringWithFormat:@"%@ → %lu 个候选", target, (unsigned long)cands.count];
+	    [NSString stringWithFormat:@"%@ → %lu 个候选", bid, (unsigned long)cands.count];
 	cell.detailTextLabel.textColor = [UIColor secondaryLabelColor];
-	cell.imageView.image = [SJAppPicker iconForBundleID:target];
+	cell.imageView.image = [SJAppPicker iconForBundleID:bid];
+	cell.imageView.layer.cornerRadius = 8;
+	cell.imageView.layer.cornerCurve = kCACornerCurveContinuous;
+	cell.imageView.clipsToBounds = YES;
 	cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
 	return cell;
 }
@@ -152,22 +121,20 @@ static NSString *const kCellID = @"SJRuleCell";
 - (void)tableView:(UITableView *)tv didSelectRowAtIndexPath:(NSIndexPath *)ip
 {
 	[tv deselectRowAtIndexPath:ip animated:YES];
+	if (self.rules.count == 0) { [self addRule]; return; }
+	if (ip.row >= (NSInteger)self.rules.count) return;
 
-	if (ip.section == 0) { [self editBlacklist]; return; }
-	if (!self.rules.count) { [self addRule]; return; }
-
-	SJRuleEditorController *vc =
-	    [[SJRuleEditorController alloc] initWithRule:self.rules[ip.row]];
+	SJRuleEditorController *vc = [[SJRuleEditorController alloc] initWithRule:self.rules[ip.row]];
 	__weak typeof(self) w = self;
 	vc.onSaved = ^{
-		[w reloadData];
+		[w reloadRules];
 	};
 	[self.navigationController pushViewController:vc animated:YES];
 }
 
 - (BOOL)tableView:(UITableView *)tv canEditRowAtIndexPath:(NSIndexPath *)ip
 {
-	return ip.section == 1 && self.rules.count > 0;
+	return self.rules.count > 0 && ip.row < (NSInteger)self.rules.count;
 }
 
 - (void)tableView:(UITableView *)tv
@@ -179,7 +146,9 @@ static NSString *const kCellID = @"SJRuleCell";
 
 	[self.rules removeObjectAtIndex:ip.row];
 	[SJRuleStore saveRules:self.rules];
-	[self reloadData];
+	[self.tableView reloadData];
+	void (^cb)(void) = self.onSaved;
+	if (cb) cb();
 }
 
 @end

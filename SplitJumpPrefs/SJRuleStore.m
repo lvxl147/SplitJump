@@ -127,4 +127,11 @@
 	[self commitDomain:d];
 }
 
++ (void)requestRespring
+{
+	CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
+	                                     CFSTR("com.lvxl524.splitjump/Respring"),
+	                                     NULL, NULL, YES);
+}
+
 @end

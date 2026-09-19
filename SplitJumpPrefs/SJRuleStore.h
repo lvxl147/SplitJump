@@ -40,6 +40,10 @@ NS_ASSUME_NONNULL_BEGIN
 
 #pragma mark 其它
 
+/// 请求注销：只发 Darwin 通知，由 SpringBoard 进程里的插件自己结束自己
+/// （「设置」进程没有权限杀别的进程）
++ (void)requestRespring;
+
 /// 写完偏好后调用：通知 SpringBoard 里的插件立即重载
 + (void)notify;
 

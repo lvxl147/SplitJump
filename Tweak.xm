@@ -23,6 +23,8 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
+#import <unistd.h>
+#import <signal.h>
 
 #import "SJCompat.h"
 #import "SJRules.h"
@@ -409,6 +411,16 @@ static void SJPrefsChanged(CFNotificationCenterRef center, void *observer, CFStr
 	SJReloadPrefs();
 }
 
+// 设置面板里的「注销 SpringBoard」按钮：面板进程没有权限杀别的进程，
+// 所以只发通知，由这里（SpringBoard 自己）结束自己，再由系统拉起来。
+static void SJRespringRequested(CFNotificationCenterRef center, void *observer,
+                                CFStringRef name, const void *object,
+                                CFDictionaryRef userInfo)
+{
+	SJLog(@"respring requested from Settings");
+	kill(getpid(), SIGKILL);
+}
+
 #pragma mark - 入口
 
 %ctor {
@@ -417,6 +429,11 @@ static void SJPrefsChanged(CFNotificationCenterRef center, void *observer, CFStr
 	CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL,
 	                                (CFNotificationCallback)SJPrefsChanged,
 	                                CFSTR("com.lvxl524.splitjump/ReloadPrefs"), NULL,
+	                                CFNotificationSuspensionBehaviorDeliverImmediately);
+
+	CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL,
+	                                (CFNotificationCallback)SJRespringRequested,
+	                                CFSTR("com.lvxl524.splitjump/Respring"), NULL,
 	                                CFNotificationSuspensionBehaviorDeliverImmediately);
 
 	// 延迟安装上游钩子：等其它插件（含分屏/浮窗类）都装完再装，
