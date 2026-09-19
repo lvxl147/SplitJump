@@ -12,25 +12,35 @@ jobs:
     # RootHide 的隐藏 jbroot，用户不再需要手动转换 rootless 包。
     # 参考：EchoReborn（lvxl147）的 CI 就是这么做的。
     name: Build (${{ matrix.scheme }})
-    runs-on: macos-latest
+    runs-on: macos-14
     strategy:
       fail-fast: false
       matrix:
         scheme: [ rootless, roothide ]
-    env:
-      THEOS: ${{ github.workspace }}/theos
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Theos and tools
+      # 必须用 waruhachi/theos：主线 theos/theos 没有 roothide 打包方案
+      # （报 'roothide' package scheme does not exist）。
+      # EchoReborn（lvxl147）同样用这个 action 出 rootless / roothide 两种包。
+      - name: Set up Theos (roothide-capable)
+        uses: waruhachi/theos-action@v2.4.6
+        with:
+          theos-src: 'waruhachi/theos'
+          theos-branch: 'main'
+          sdks-src: 'waruhachi/sdks'
+          sdks-branch: 'main'
+
+      - name: Install tools and vet Theos
         run: |
           brew install make dpkg
           brew install ldid || true
           command -v dpkg-deb
-          git clone --recursive https://github.com/theos/theos.git "$THEOS"
+          echo "THEOS=$THEOS"
           ls "$THEOS/makefiles/common.mk"
+          ls "$THEOS/sdks" | head -5
 
       # 设置面板是 PreferenceBundle，不能用 Theos 的 subproject 机制
       # （subproject 要求产出 *.subproject.a，bundle 不产出，会让主 dylib 链接失败）。
